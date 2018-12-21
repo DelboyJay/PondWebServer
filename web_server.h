@@ -1,6 +1,6 @@
 #include <Ethernet.h>
 
-// client incomming message variables
+// client incoming message variables
 #define CLIENT_BUF_SIZE 129
 
 class WebServer{
