@@ -18,21 +18,18 @@ LiquidCrystal_I2C lcd(0x3F, 20, 4);
 // Shows a dot tick on the LCD display in the top-right corner
 //
 byte tick = 0;
+
 void show_tick() {
-  const char* tick_chars = " .";
+  const char *tick_chars = " .";
   lcd.setCursor(19, 0);
   lcd.print(tick_chars[tick++]);
   if (tick == 2) tick = 0;
 }
 
-void favicon_callback(EthernetClient& client, const char* request){
-  WebServer::send_client_header(client, 404, "NOT FOUND");
-}
-
-void api_status_callback(EthernetClient& client, const char* request){
-	byte temps[2] = {0, 0};
+void api_status_callback(EthernetClient &client, const char *request) {
+  byte temps[2] = {0, 0};
   sensors.last_read_all(temps);
-  
+
   WebServer::send_client_header(client);
 
   char data[48] = {0};
@@ -44,24 +41,24 @@ void api_status_callback(EthernetClient& client, const char* request){
       client.print(",");
   }
   client.print("],\"relays\":[");
-  for (int i = 0; i < 6; i++) {
+  for (int i = 0; i < MAX_RELAYS; i++) {
     sprintf(
-      data,
-      "{\"name\":\"%s\", \"state\":%i}",
-      relays.name(i), relays.get_state(i)
+            data,
+            "{\"name\":\"%s\", \"state\":%i}",
+            relays.name(i), relays.get_state(i)
     );
     client.print(data);
-    if (i != 5)
+    if (i != MAX_RELAYS - 1)
       client.print(",");
   }
   client.print("]}");
-	Serial.println("***D1");
+  Serial.println("***D1");
 }
 
-void temperatures_callback(EthernetClient& client, const char* request){
+void temperatures_callback(EthernetClient &client, const char *request) {
   byte temps[2] = {0, 0};
   sensors.last_read_all(temps);
-  
+
   WebServer::send_client_header(client, 200, "OK", 5);
   client.println("<!DOCTYPE HTML>\n<html>\n<h1>Temperature sensors</h1>\nTemp1: ");
   client.print(temps[0]);
@@ -95,8 +92,7 @@ void api_relays_callback(EthernetClient &client, const char *request) {
 void setup() {
   // Open serial communications and wait for port to open:
   Serial.begin(9600);
-  while (!Serial) {
-    ; // wait for serial port to connect. Needed for native USB port only
+  while (!Serial) { ; // wait for serial port to connect. Needed for native USB port only
   }
 
   // setup the lcd display
@@ -108,7 +104,7 @@ void setup() {
 
   // Check for Ethernet hardware present
   if (Ethernet.hardwareStatus() == EthernetNoHardware) {
-    const char* buf = "Ethernet shield was not found.";
+    const char *buf = "Ethernet shield was not found.";
     Serial.println(buf);
     lcd.setCursor(0, 0);
     lcd.print(buf);
