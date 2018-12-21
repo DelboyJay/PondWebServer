@@ -49,7 +49,7 @@ public:
 		get_ip_as_string(this->server_ip, buf, 80, add_port);
 	}
 	
-	void get_client_ip_as_string(EthernetClient& client, char buf[]) {
+	static void get_client_ip_as_string(EthernetClient& client, char buf[]) {
 		get_ip_as_string(client.remoteIP(), buf, 0, false);
 	}
 	
