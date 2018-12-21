@@ -1,7 +1,12 @@
 #include <Ethernet.h>
 
 // client incoming message variables
-#define CLIENT_BUF_SIZE 129
+#define CLIENT_BUF_SIZE 32
+
+#define MAX_CALLBACKS 4
+
+// Define a callback function
+typedef void(*func_ptr_t)(EthernetClient& client, const char* request);
 
 class WebServer{
 private:
@@ -9,11 +14,14 @@ private:
 	EthernetServer* server;
 	byte mac[6] = {0x8E, 0x19, 0xA7, 0x54, 0xD5, 0x97};
 	char client_buffer[CLIENT_BUF_SIZE + 1] = {0};
+	char registered_urls[MAX_CALLBACKS][33];
+	func_ptr_t	registered_callbacks[MAX_CALLBACKS];
+	int callback_counter = 0;
 	
 public:
 	WebServer(){
 		this->server_ip = IPAddress(192, 168, 1, 177);
-		this->server = new EthernetServer((uint16_t)80);
+		this->server = new EthernetServer(80);
 	}
 	
 	~WebServer(){
@@ -38,16 +46,18 @@ public:
 	}
 	
 	void get_server_ip_as_string(char buf[], bool add_port = true) {
-		IPAddress ip = this->server_ip;
-		if(add_port)
-			sprintf(buf, "%d.%d.%d.%d:%d", ip[0], ip[1], ip[2], ip[3], 80);
-		else
-			sprintf(buf, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+		get_ip_as_string(this->server_ip, buf, 80, add_port);
 	}
 	
 	void get_client_ip_as_string(EthernetClient& client, char buf[]) {
-		IPAddress ip = client.remoteIP();
-		sprintf(buf, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+		get_ip_as_string(client.remoteIP(), buf, 0, false);
+	}
+	
+	static inline void get_ip_as_string(IPAddress ip, char buf[], int port, bool add_port = true){
+		if(add_port)
+			sprintf(buf, "%d.%d.%d.%d:%d", ip[0], ip[1], ip[2], ip[3], 80);
+		else
+			sprintf(buf, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);		
 	}
 	
 	EthernetClient available(){
@@ -101,49 +111,18 @@ public:
 	//
 	void process_client(EthernetClient& client, Relays& relays, const byte temps[2]) {
 	  while (!get_request_line(client)) {
-			Serial.print(client_buffer);
-			if (!strcmp(client_buffer, "GET /temperatures/ HTTP/1.1\r\n")) {
-				// flush the buffer
-				while (client.read() != -1);
-				send_client_data(client, temps);
-				return;
-			}
-			if (!strcmp(client_buffer, "GET /api/v1/status/ HTTP/1.1\r\n")) {
-				Serial.println("Sending client API JSON response.");
-				// flush the buffer
-				while (client.read() != -1);
-				
-				send_client_header(client);
-				char data[33] = {0};
-
-				client.print("{\"temperatures\":[");
-				for (int i = 0; i < 2; i++) {
-					sprintf(data, "%i", temps[i]);
-					client.print(data);
-					if (i != 1)
-						client.print(",");
+			Serial.print(client_buffer);	
+			for(int i=0;i<callback_counter;i++)
+			{
+				if (!strncmp(client_buffer, registered_urls[i], strlen(registered_urls[i]))) {
+					while (client.read() != -1);
+					if(registered_callbacks[i]==0){
+						Serial.println("***ERROR*** - null callback");
+						return;
+					}
+					registered_callbacks[i](client, client_buffer);
+					return;
 				}
-				client.print("],\"relays\":[");
-				for (int i = 0; i < 6; i++) {
-					sprintf(
-						data,
-						"{\"name\":\"%s\", \"state\":%i}",
-						relays.name(i), relays.get_state(i)
-					);
-					client.print(data);
-					if (i != 5)
-						client.print(",");
-				}
-				client.print("]}");
-				return;
-			}
-			if (!strcmp(client_buffer, "GET /favicon.ico HTTP/1.1\r\n")) {
-				// flush the buffer
-				while (client.read() != -1);
-				client.println("HTTP/1.1 404 NOT FOUND");
-				client.println("Content-Type: text/html");
-				client.println("Connection: close");  // the connection will be closed after completion of the response
-				return;
 			}
 		}
 	}
@@ -151,19 +130,18 @@ public:
 	//
 	// Sends a standard 200 OK client header.
 	//
-	void send_client_header(
+	static void send_client_header(
 			EthernetClient& client, 
-			int refresh=0, 
 			int status_code=200, 
-			const char status_text[]="OK"
+			const char status_text[]="OK",
+			int refresh=0
 		) {
 		// send a standard http response header
 		client.print("HTTP/1.1 ");
 		client.print(status_code);
 		client.print(" ");
 		client.println(status_text);
-		client.println("Content-Type: text/html");
-		client.println("Connection: close");  // the connection will be closed after completion of the response
+		client.println("Content-Type: text/html\nConnection: close");  
 		if (refresh) {
 			client.print("Refresh: ");
 			client.println(refresh);  // refresh the page automatically every n sec
@@ -171,20 +149,15 @@ public:
 		client.println();
 	}
 		
-	//
-	// Sends temperature data as a HTML page
-	//
-	void send_client_data(EthernetClient& client, const byte temps[2]) {
-		send_client_header(client, 5);
-		client.println("<!DOCTYPE HTML>");
-		client.println("<html>");
-		client.println("<h1>Temperature sensors</h1>");
-		client.print("Temp1: ");
-		client.print(temps[0]);
-		client.println("<br />");
-		client.print("Temp2: ");
-		client.print(temps[1]);
-		client.println("<br />");
-		client.println("</html>");
+	void register_callback(const char* url_path, func_ptr_t callback){
+		if(callback_counter==MAX_CALLBACKS){
+			Serial.println("***ERROR*** - too many callbacks");
+			return;
+		}
+		
+		strcpy(registered_urls[callback_counter], url_path);
+		registered_callbacks[callback_counter] = callback;
+		callback_counter++;
 	}
+	
 };
