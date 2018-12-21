@@ -52,7 +52,6 @@ void api_status_callback(EthernetClient &client, const char *request) {
       client.print(",");
   }
   client.print("]}");
-  Serial.println("***D1");
 }
 
 void temperatures_callback(EthernetClient &client, const char *request) {
