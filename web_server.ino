@@ -70,6 +70,25 @@ void temperatures_callback(EthernetClient& client, const char* request){
   client.println("<br /></html>");
 }
 
+void api_relays_callback(EthernetClient &client, const char *request) {
+  char buf[7] = {0};
+  const char *ptr = request + 20;
+  for (int i = 0; i < MAX_RELAYS; i++) {
+    sprintf(buf, "%i/on/", i);
+    if (!strncmp(ptr, buf, 5)) {
+      relays.set_state(i, 1);
+      WebServer::send_client_header(client);
+      return;
+    }
+    sprintf(buf, "%i/off/", i);
+    if (!strncmp(ptr, buf, 6)) {
+      relays.set_state(i, 0);
+      WebServer::send_client_header(client);
+      return;
+    }
+  }
+}
+
 //
 // Main Setup function
 //
