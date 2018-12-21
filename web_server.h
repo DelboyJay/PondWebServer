@@ -1,7 +1,7 @@
 #include <Ethernet.h>
 
 // client incoming message variables
-#define CLIENT_BUF_SIZE 32
+#define CLIENT_BUF_SIZE 28
 
 #define MAX_CALLBACKS 4
 
@@ -79,21 +79,15 @@ public:
 
 				client_buffer[i] = c;
 				if (c == '\n') {
-					if (i <= 1) {
-						// End of request detected
-						client_buffer[i + 1] = '\0';
-						return true;
-					}
-					// No end of request detected
-					client_buffer[i + 1] = '\0';
-					return false;
+                    client_buffer[i + 1] = '\0';
+                    // If i<=1 then end of request detected
+                    return (i <= 1);
 				}
 			}
 		}
 		// No end of request detected
 		return false;
 	}
-
 
 	//
 	// Closes the client connection
@@ -111,7 +105,7 @@ public:
 	//
 	void process_client(EthernetClient& client, Relays& relays, const byte temps[2]) {
 	  while (!get_request_line(client)) {
-			Serial.print(client_buffer);	
+          Serial.println(client_buffer);
 			for(int i=0;i<callback_counter;i++)
 			{
 				if (!strncmp(client_buffer, registered_urls[i], strlen(registered_urls[i]))) {
