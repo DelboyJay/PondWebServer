@@ -7,23 +7,13 @@
 #include <DallasTemperature.h>
 #include <Ethernet.h>
 #include "relays.h"
+#include "temp_sensors.h"
 
 Relays relays;
+TempSensors sensors;
 
 // Setup the LCD display
 LiquidCrystal_I2C lcd(0x3F, 20, 4);
-
-/********************************************************************/
-// Data wire is plugged into pin 2 on the Arduino
-#define ONE_WIRE_BUS 2
-/********************************************************************/
-// Setup a oneWire instance to communicate with any OneWire devices
-// (not just Maxim/Dallas temperature ICs)
-OneWire oneWire(ONE_WIRE_BUS);
-/********************************************************************/
-// Pass our oneWire reference to Dallas Temperature.
-DallasTemperature sensors(&oneWire);
-short temp_counter=0;
 
 // Enter a MAC address and IP address for your controller below.
 // The IP address will be dependent on your local network:
@@ -82,27 +72,6 @@ void send_client_data(EthernetClient& client, const byte temps[2]){
   client.print(temps[1]);
   client.println("<br />");
   client.println("</html>");
-}
-
-//
-// Obtains the tempratures form the sensors
-//
-void get_temperatures(byte temperatures[2]){
-  if(temp_counter==0)
-    sensors.requestTemperatures(); // Send the command to get temperature readings
-  for(int index=0;index<2;index++){
-    temperatures[index] = byte(sensors.getTempCByIndex(index));
-  }
-  temp_counter++;
-  if(temp_counter==50)
-    temp_counter=0;
-}
-
-//
-// Formats the tesmprature values as a string
-//
-void get_temperature_string(char* buf, const byte temps[2]){
-  sprintf(buf, "T1: %d   T2: %d     ", (int)temps[0], (int)temps[1]);
 }
 
 //
@@ -220,9 +189,6 @@ void setup() {
   lcd.backlight();
   lcd.clear();
 
-  // Initialise the temperature sensors
-  sensors.begin();
-
   // You can use Ethernet.init(pin) to configure the CS pin
   Ethernet.init(10);  // Most Arduino shields
 
@@ -262,7 +228,7 @@ void loop() {
   show_tick();
 
   byte temps[2] = {0, 0};
-  get_temperatures(temps);
+  sensors.read_all(temps);
 
   // listen for incoming clients
   EthernetClient client = server.available();
@@ -278,7 +244,7 @@ void loop() {
   }
 
   char buf[22]={0};
-  get_temperature_string(buf, temps);
+  sensors.get_temperature_string(buf, temps);
   lcd.setCursor(0, 2);
   lcd.print(buf);
   //Serial.println(msg);
