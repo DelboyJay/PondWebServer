@@ -3,8 +3,6 @@
 */
 
 #include <LiquidCrystal_I2C.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
 #include <Ethernet.h>
 #include "relays.h"
 #include "temp_sensors.h"
@@ -28,7 +26,7 @@ int server_port = 80;
 // (port 80 is default for HTTP):
 EthernetServer server(server_port);
 
-// client incomming message variables 
+// client incoming message variables
 #define CLIENT_BUF_SIZE 129
 char client_buffer[CLIENT_BUF_SIZE+1]={0};
 
