@@ -112,12 +112,6 @@ void setup() {
       delay(1); // do nothing, no point running without Ethernet hardware
     }
   }
-  if (Ethernet.linkStatus() == LinkOFF) {
-    const char* buf = "Ethernet cable is not connected.";
-    Serial.println(buf);
-    lcd.setCursor(0, 0);
-    lcd.print(buf);
-  }
 
   // start the server
   server.begin();
@@ -126,10 +120,9 @@ void setup() {
   lcd.setCursor(0, 0);
   lcd.print(buf);
 
-  server.register_callback("GET /favicon.ico ", &favicon_callback);
   server.register_callback("GET /api/v1/status/ ", &api_status_callback);
   server.register_callback("GET /temperatures/ ", &temperatures_callback);
-  
+  server.register_callback("POST /api/v1/relays/", &api_relays_callback);
 }
 
 //
