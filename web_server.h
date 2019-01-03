@@ -2,7 +2,7 @@
 
 // client incoming message variables
 #define CLIENT_BUF_SIZE 28
-
+#define SERVER_PORT 9000
 #define MAX_CALLBACKS 4
 
 // Define a callback function
@@ -14,14 +14,14 @@ private:
   EthernetServer *server;
   byte mac[6] = {0x8E, 0x19, 0xA7, 0x54, 0xD5, 0x97};
   char client_buffer[CLIENT_BUF_SIZE + 1] = {0};
-  char registered_urls[MAX_CALLBACKS][33];
+  char registered_urls[MAX_CALLBACKS][CLIENT_BUF_SIZE + 1];
   func_ptr_t registered_callbacks[MAX_CALLBACKS];
   int callback_counter = 0;
 
 public:
   WebServer() {
     this->server_ip = IPAddress(192, 168, 1, 177);
-    this->server = new EthernetServer(80);
+    this->server = new EthernetServer(SERVER_PORT);
   }
 
   ~WebServer() {
@@ -46,7 +46,7 @@ public:
   }
 
   void get_server_ip_as_string(char buf[], bool add_port = true) {
-    get_ip_as_string(this->server_ip, buf, 80, add_port);
+    get_ip_as_string(this->server_ip, buf, SERVER_PORT, add_port);
   }
 
   static void get_client_ip_as_string(EthernetClient &client, char buf[]) {
@@ -55,7 +55,7 @@ public:
 
   static inline void get_ip_as_string(IPAddress ip, char buf[], int port, bool add_port = true) {
     if (add_port)
-      sprintf(buf, "%d.%d.%d.%d:%d", ip[0], ip[1], ip[2], ip[3], 80);
+      sprintf(buf, "%d.%d.%d.%d:%d", ip[0], ip[1], ip[2], ip[3], SERVER_PORT);
     else
       sprintf(buf, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
   }
@@ -97,7 +97,6 @@ public:
     delay(1);
     // close the connection:
     client.stop();
-    Serial.println("Client disconnected");
   }
 
   //
@@ -105,14 +104,14 @@ public:
   //
   void process_client(EthernetClient &client, Relays &relays, const byte temps[2]) {
     while (!get_request_line(client)) {
-      Serial.println(client_buffer);
       for (int i = 0; i < callback_counter; i++) {
+
+        // Try to find a match for teh callback URL
         if (!strncmp(client_buffer, registered_urls[i], strlen(registered_urls[i]))) {
+          // Clear out the client buffer as we don't need the rest of the data
           while (client.read() != -1);
-          if (registered_callbacks[i] == 0) {
-            Serial.println("***ERROR*** - null callback");
-            return;
-          }
+
+          // Make a call to the callback function
           registered_callbacks[i](client, client_buffer);
           return;
         }
@@ -144,7 +143,6 @@ public:
 
   void register_callback(const char *url_path, func_ptr_t callback) {
     if (callback_counter == MAX_CALLBACKS) {
-      Serial.println("***ERROR*** - too many callbacks");
       return;
     }
 
