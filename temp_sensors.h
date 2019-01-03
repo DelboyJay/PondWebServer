@@ -63,12 +63,4 @@ public:
 			temperatures[i] = byte(sensors->getTempCByIndex(i));
 		}
 	}
-	
-	//
-	// Formats the tesmprature values as a string
-	//
-	static void get_temperature_string(char buf[22], const byte temperatures[2]){
-		sprintf(buf, "T1: %d   T2: %d     ", (int)temperatures[0], (int)temperatures[1]);
-	}
 };
-
