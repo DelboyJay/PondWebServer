@@ -10,9 +10,9 @@ private:
   // default first relay as on for the pond pump
   byte states[MAX_RELAYS] = {1, 0, 0};
   const char *names[MAX_RELAYS] = {
-          "Pond pump",
-          "LED Lights",
-          "Rockery Lights",
+          "pond_pump",
+          "waterfall_lights",
+          "rockery_lights",
   };
 
 public:
@@ -41,4 +41,26 @@ public:
   const int count() {
     return sizeof(pins);
   };
+
+  void get_states(byte buf[MAX_RELAYS]){
+    for(int i=0;i<MAX_RELAYS;i++)
+      buf[i] = states[i];
+  }
+
+  void test(){
+    byte buf[MAX_RELAYS]={0};
+    this->get_states(buf);
+    
+    for (int index = 0; index < sizeof(pins); index++) {
+      this->set_state(index, 1);
+      delay(1000);      
+    }    
+    for (int index = 0; index < sizeof(pins); index++) {
+      this->set_state(index, 0);
+      delay(1000);      
+    }    
+    for (int index = 0; index < sizeof(pins); index++) {
+      this->set_state(index, buf[index]);
+    }      
+  }
 };
