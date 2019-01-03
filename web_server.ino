@@ -2,28 +2,26 @@
   Temperature Sensor Web Server
 */
 
-#include <LiquidCrystal_I2C.h>
 #include "relays.h"
 #include "temp_sensors.h"
 #include "web_server.h"
+
+#define WATCHDOG_PIN 7
 
 Relays relays;
 TempSensors sensors;
 WebServer server;
 
-// Setup the LCD display
-LiquidCrystal_I2C lcd(0x3F, 20, 4);
+bool blink_value = false;
+const char *temp_names[] = {"water", "air"};
+byte watchdog_counter = 0;
+unsigned long loop_counter = 0;
+unsigned long valid_requests = 0;
+unsigned long requests = 0;
 
-//
-// Shows a dot tick on the LCD display in the top-right corner
-//
-byte tick = 0;
-
-void show_tick() {
-  const char *tick_chars = " .";
-  lcd.setCursor(19, 0);
-  lcd.print(tick_chars[tick++]);
-  if (tick == 2) tick = 0;
+void favicon_callback(EthernetClient &client, const char *request) {
+  WebServer::send_client_header(client, 404, "NOT FOUND");
+  valid_requests++;
 }
 
 void api_status_callback(EthernetClient &client, const char *request) {
@@ -33,25 +31,42 @@ void api_status_callback(EthernetClient &client, const char *request) {
   WebServer::send_client_header(client);
 
   char data[48] = {0};
-  client.print("{\"temperatures\":[");
+  client.print("{\"temperatures\":{");
   for (int i = 0; i < 2; i++) {
-    sprintf(data, "%i", temps[i]);
+    sprintf(data, "\"%s\": %i", temp_names[i], temps[i]);
     client.print(data);
     if (i != 1)
       client.print(",");
   }
-  client.print("],\"relays\":[");
+  client.print("},\"relays\":{");
   for (int i = 0; i < MAX_RELAYS; i++) {
     sprintf(
             data,
-            "{\"name\":\"%s\", \"state\":%i}",
+            "\"%s\":%i",
             relays.name(i), relays.get_state(i)
     );
     client.print(data);
     if (i != MAX_RELAYS - 1)
       client.print(",");
   }
-  client.print("]}");
+  client.print("}, \"system_info\":{ ");
+  unsigned long ticks = millis();
+  sprintf(data, "\"ticks_ms\":%lu,", ticks);
+  client.print(data);
+  sprintf(data, "\"loops\":%lu, ", loop_counter);
+  client.print(data);
+  sprintf(data, "\"loop_time_ms\":%lu, ", (unsigned long) (ticks / loop_counter));
+  client.print(data);
+
+  valid_requests++;
+  client.print("\"requests\": {");
+  sprintf(data, "\"valid\":%lu, ", (unsigned long) valid_requests);
+  client.print(data);
+  sprintf(data, "\"invalid\":%lu, ", (unsigned long) (requests - valid_requests));
+  client.print(data);
+  sprintf(data, "\"total\":%lu ", (unsigned long) requests);
+  client.print(data);
+  client.print("} } }");
 }
 
 void temperatures_callback(EthernetClient &client, const char *request) {
@@ -59,11 +74,12 @@ void temperatures_callback(EthernetClient &client, const char *request) {
   sensors.last_read_all(temps);
 
   WebServer::send_client_header(client, 200, "OK", 5);
-  client.println("<!DOCTYPE HTML>\n<html>\n<h1>Temperature sensors</h1>\nTemp1: ");
+  client.println("<!DOCTYPE HTML>\n<html>\n<h1>Temperature sensors</h1>\nWater: ");
   client.print(temps[0]);
-  client.println("<br />Temp2: ");
+  client.println("<br />Air: ");
   client.print(temps[1]);
   client.println("<br /></html>");
+  valid_requests++;
 }
 
 void api_relays_callback(EthernetClient &client, const char *request) {
@@ -74,12 +90,14 @@ void api_relays_callback(EthernetClient &client, const char *request) {
     if (!strncmp(ptr, buf, 5)) {
       relays.set_state(i, 1);
       WebServer::send_client_header(client);
+      valid_requests++;
       return;
     }
     sprintf(buf, "%i/off/", i);
     if (!strncmp(ptr, buf, 6)) {
       relays.set_state(i, 0);
       WebServer::send_client_header(client);
+      valid_requests++;
       return;
     }
   }
@@ -88,64 +106,50 @@ void api_relays_callback(EthernetClient &client, const char *request) {
 //
 // Main Setup function
 //
-void setup() {
-  // Open serial communications and wait for port to open:
-  Serial.begin(9600);
-  while (!Serial) { ; // wait for serial port to connect. Needed for native USB port only
-  }
-
-  // setup the lcd display
-  lcd.init();
-  lcd.backlight();
-  lcd.clear();
-
+void setup() { 
   server.init_board();
+
+  pinMode(WATCHDOG_PIN, OUTPUT);
+  digitalWrite(WATCHDOG_PIN, 1);
 
   // Check for Ethernet hardware present
   if (Ethernet.hardwareStatus() == EthernetNoHardware) {
-    const char *buf = "Ethernet shield was not found.";
-    Serial.println(buf);
-    lcd.setCursor(0, 0);
-    lcd.print(buf);
+    bool state = false;
     while (true) {
-      delay(1); // do nothing, no point running without Ethernet hardware
+      delay(1000); // do nothing, no point running without Ethernet hardware
+      relays.set_state(1, state);
+      state = !state;
     }
+
   }
 
   // start the server
   server.begin();
-  char buf[22] = {'='};
-  server.get_server_ip_as_string(buf);
-  lcd.setCursor(0, 0);
-  lcd.print(buf);
-
   server.register_callback("GET /api/v1/status/ ", &api_status_callback);
   server.register_callback("GET /temperatures/ ", &temperatures_callback);
+  server.register_callback("GET /favicon.ico ", &favicon_callback);
   server.register_callback("POST /api/v1/relays/", &api_relays_callback);
+
+  // test the relays
+  relays.test();
 }
 
 //
 // Main Loop function
 //
 void loop() {
-  show_tick();
-
   byte temps[2] = {0, 0};
   sensors.read_all(temps);
 
   // listen for incoming clients
   EthernetClient client = server.available();
   if (client) {
-    char remote_ip[22] = {'='};
-    server.get_client_ip_as_string(client, remote_ip);
-    lcd.setCursor(0, 1);
-    lcd.print(remote_ip);
+    requests++;
     server.process_client(client, relays, temps);
     server.close_client_connection(client);
   }
-
-  char buf[22] = {0};
-  sensors.get_temperature_string(buf, temps);
-  lcd.setCursor(0, 2);
-  lcd.print(buf);
+  watchdog_counter++;
+  watchdog_counter %= 20;
+  digitalWrite(WATCHDOG_PIN, watchdog_counter < 10);
+  loop_counter++; 
 }
